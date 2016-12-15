@@ -194,9 +194,9 @@ class vggClassify():
         early_stopping = EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='auto')
 
         # 模型生成
-        newmodel.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+        self.top_model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
 
-        self.hist = newmodel.fit(train_data, train_labels,
+        self.hist = self.top_model.fit(train_data, train_labels,
                 nb_epoch=self.nb_epoch, batch_size=45,
                 callbacks=[model_check, early_stopping],   # model_check, early_stopping
                 validation_data=(validation_data, validation_labels),
@@ -362,8 +362,14 @@ class vggClassify():
 #
 if __name__ == '__main__':
     vgg = vggClassify()
-    vgg.build_vgg_model()
-    vgg.get_bottlenect_feature()
+
+    # 1.0 提取bottlenect 特征，建立全连接层，微调全连接层权重
+    flag_1 = True
+    if flag1:
+        vgg.build_vgg_model()
+        #vgg.get_bottlenect_feature()   # 提取bottlenect特征，已经保存在本地，不需要重复运行
+        vgg.build_top_model()
+        vgg.fineTune_fully_connected_layer()
 
 
 """
