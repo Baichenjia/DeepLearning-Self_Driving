@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import re
 import numpy as np
 import os
+import support_func
 
 
 # VGG 为基础的类
@@ -38,9 +39,20 @@ class vggClassify():
         self.path_fully_connected = "weights_fully_connected/"
         assert os.path.exists(self.path_fully_connected), "Not Found path path_fully_connected dir"
 
+        # 训练好的全连接层的权重存储位置
+        self.path_weights_fully_connected = "weights_fully_connected/sgd/checkpoint-002-0.33.h5"
+        assert os.path.exists(self.path_weights_fully_connected), "Not Found path path_weights_fully_connected"
+
+        # 同时 fine tune ConvBlock5 和 全连接层 权重
+        self.path_conv_block5 = "weights_conv_block5/"
+        assert os.path.exists(self.path_conv_block5), "Not Found path path_conv_block5 dir"
+
         # 训练样本个数 验证样本个数
         self.train_data_size = 4500
         self.valid_data_size = 900
+
+        # BottleNect 特征的size， 该 size 由 VGG16 的网络结构决定
+        self.bottlenect_feature_size = np.array([7, 7, 512])
 
         # 迭代次数
         self.nb_epoch = 100
@@ -151,7 +163,7 @@ class vggClassify():
         print "设置全连接层"
 
         top_model = Sequential()
-        top_model.add(Flatten(input_shape=np.array([7, 7, 512])))
+        top_model.add(Flatten(input_shape=self.bottlenect_feature_size))
         top_model.add(Dense(512, activation='relu'))
         top_model.add(Dropout(0.5))
         top_model.add(Dense(128, activation='relu'))
@@ -185,7 +197,7 @@ class vggClassify():
         print "验证label shape = ", validation_labels.shape
 
         # 梯度下降，动量更新
-        # sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
+        sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
 
         # model check    保存在验证集上最好的模型
         model_check = ModelCheckpoint(self.path_fully_connected + "checkpoint-{epoch:03d}-{val_loss:.2f}.h5", monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True, mode='auto')
@@ -194,7 +206,8 @@ class vggClassify():
         early_stopping = EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='auto')
 
         # 模型生成
-        self.top_model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+        #self.top_model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+        self.top_model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
         self.hist = self.top_model.fit(train_data, train_labels,
                 nb_epoch=self.nb_epoch, batch_size=45,
@@ -206,157 +219,88 @@ class vggClassify():
         log_file = open(self.path_fully_connected + "hist.txt", "w")
         log_file.write(str(self.hist.history))
         log_file.close()
-        self.plot_hist()
+
+        support_func.plot_hist(self.path_fully_connected)
 
         print "全连接层训练完毕，权重保存...完毕！"
 
     #
-    def vgg_fine_tune(self):
+    # 微调第 5 个卷积层模块
+    def fineTune_conv_bolck5_layer(self):
         """
         1. 为了进行fine-tune，所有的层都应该以训练好的权重为初始值
         2. fine-tune最后的卷积块，而不是整个网络，这是为了防止过拟合
         3. fine-tune应该在很低的学习率下进行，通常使用SGD优化而不是其他自适应学习率的优化算法
         """
-        print "\n\nfine-tune VGG16最后一个卷积层..."
-        self.train_data_size = 900
-        self.valid_data_size = 120
-        self.top_model_weights_path = "store_val_model_6_rmsprop_dropout0.3_L2_224/checkpoint-15-0.64-best.h5"
-        self.dir_path = "store_val_model_8/"
+        print "----------------"
+        print "fine-tune Convolution Block5 卷积层模块..."
 
-        # topModel
-        top_model = Sequential()
-        top_model.add(Flatten(input_shape=self.model.output_shape[1:]))
-        top_model.add(Dense(1024, W_regularizer=l2(0.001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(1024, W_regularizer=l2(0.001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(1024, W_regularizer=l2(0.001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(1024, W_regularizer=l2(0.001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(512, W_regularizer=l2(0.001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(256, W_regularizer=l2(0.0001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(128, W_regularizer=l2(0.0001), activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(64, activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(32, activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(16, activation='relu'))
-        top_model.add(Dropout(0.3))
-        top_model.add(Dense(3, activation='softmax'))
-        # 载入 top_model 的权重
+        # 全连接层权重存储于: self.path_weights_fully_connected
+        # 训练好的整体模型权重存储于： self.path_conv_block5
+
+        print "VGG16-no-top-model 载入预训练好的权重..."
+        self.model.load_weights(self.weights_path)
+        if K.backend() == 'theano':
+            convert_all_kernels_in_model(self.model)
+
         print "top_model 载入预训练好的权重..."
-        top_model.load_weights(self.top_model_weights_path)
-        # 生成完整模型
+        self.top_model.load_weights(self.path_weights_fully_connected)
         print "生成完整模型..."
-        self.model.add(top_model)
-
-        self.print_layers()
+        self.model.add(self.top_model)
 
         # 将除最后一个卷积层之外的参数冻结
-        print "冻结模型在 0-25 层的参数..."
+        print "冻结模型在 0-24 层 即 ConvBlock1 - ConvBlock4 的参数..."
         for layer in self.model.layers[:25]:
             layer.trainable = False
         for layer in self.model.layers[25:]:
             layer.trainable = True
 
         # 图像批量生成器
-        train_datagen = ImageDataGenerator(
-            rescale=1./255
-            #rotation_range=1,       # 0~180的度数，用来指定随机选择图片的角度
-            #width_shift_range=0.02,    # **
-            #height_shift_range=0.05,  # ** 水平和竖直方向随机移动的程度，这是两个0~1之间的比例
-            #shear_range=0.05,         # ** 错切变换
-            #fill_mode='nearest'         # 变换中像素的填充模式
-            )
-        valid_datagen = ImageDataGenerator(rescale=1./255)   # 验证数据只进行归一化处理
+        train_datagen = ImageDataGenerator(rescale=1./255)
+        valid_datagen = ImageDataGenerator(rescale=1./255)
 
         train_generator = train_datagen.flow_from_directory(
                 'data/train',
-                target_size=(224, 224),    # 高为180，宽为320 (180, 320)
-                batch_size=32,
-                class_mode='categorical')  # 类别
+                target_size=(224, 224),
+                batch_size=45,
+                class_mode='categorical')  # 自动生成类别
 
         valid_generator = valid_datagen.flow_from_directory(
                 'data/validation',
-                target_size=(224, 224),  # 高为180，宽为320
-                batch_size=32,
-                class_mode='categorical')  # 类别
+                target_size=(224, 224),
+                batch_size=45,
+                class_mode='categorical')  # 自动生成类别
 
-        # 梯度下降，动量更新
-        sgd = SGD(lr=1e-5, decay=1e-6, momentum=0.9, nesterov=True)
-        # 保存在验证集上最好的模型   仅包含权重
-        model_check = ModelCheckpoint(self.dir_path+"checkpoint-{epoch:02d}-{val_loss:.2f}.h5", monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True, mode='auto')
+        # sgd 梯度下降，动量更新
+        sgd = SGD(lr=1e-5, decay=1e-7, momentum=0.9, nesterov=True)
+
+        # modelCheck 保存在验证集上最好的模型   仅保留权重
+        model_check = ModelCheckpoint(self.path_conv_block5+"checkpoint-{epoch:03d}-{val_loss:.2f}.h5", monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True, mode='auto')
         # 当验证集合的损失不再下降时，等待 patient 后停止训练
         early_stopping = EarlyStopping(monitor='val_loss', patience=20, verbose=1, mode='auto')
 
-        #
+        # 交叉熵损失函数
         self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
         #
+        # self.train_data_size = 4500    self.valid_data_size
         print "\n开始训练..."
         self.hist = self.model.fit_generator(
                         train_generator,
-                        samples_per_epoch=900,
-                        nb_epoch=200,
+                        samples_per_epoch=self.train_data_size,
+                        nb_epoch=self.nb_epoch,
                         callbacks=[model_check, early_stopping],
                         validation_data=valid_generator,
-                        nb_val_samples=120)
+                        nb_val_samples=self.valid_data_size
+                        )
 
         # 保存日志并绘图显示
-        log_file = open(self.dir_path + "hist.txt", "w")
+        log_file = open(self.path_conv_block5 + "hist.txt", "w")
         log_file.write(str(self.hist.history))
         log_file.close()
-        self.plot_hist()
+        support_func.plot_hist(self.path_conv_block5)
 
-        print "训练完毕，权重保存...完毕！"
-
-    #
-    def plot_hist(self):
-        """
-            绘制图表明保存
-        """
-        #self.dir_path = "store_val_model_4/"
-        file_log = open(self.dir_path + "hist.txt", "r").read().strip()
-        #print "file_log = ", file_log
-        #dic = self.hist.history
-        #print dic['val_loss']
-        dic = eval(file_log)
-
-        x = [i for i in range(1, len(dic['loss'])+1)]
-
-        y1 = dic['loss']
-        y2 = dic['val_loss']
-        y3 = dic['acc']
-        y4 = dic['val_acc']
-
-        plt.figure(figsize=(25, 10))
-        plot1 = plt.subplot(121)  # 第一行的左图
-        plt.ylim(0, 3.0)
-        plt.xlabel("epoh")
-        plt.ylabel("loss")
-
-        plot2 = plt.subplot(122)  # 第一行的右图
-        plt.ylim(0, 1.0)
-        plt.xlabel("epoh")
-        plt.ylabel("acc")
-
-        plot1.plot(x, y1, label="train_loss", color="red")
-        plot1.plot(x, y2, label="validation_loss", color="blue")
-        plot1.legend()
-        plot1.grid()
-
-        plot2.plot(x, y3, label="train_acc", color="red")
-        plot2.plot(x, y4, label="validation_acc", color="blue")
-        plot2.legend()
-        plot2.grid()
-
-        plt.savefig(self.dir_path + 'train_val_loss_acc.jpg', dpi=500)
-
-        #plt.show()
+        print "fineTune_conv_bolck5_layer 训练完毕，权重保存...完毕！"
 
 
 #
@@ -364,12 +308,22 @@ if __name__ == '__main__':
     vgg = vggClassify()
 
     # 1.0 提取bottlenect 特征，建立全连接层，微调全连接层权重
-    flag_1 = True
+    flag_1 = False
     if flag_1:
         vgg.build_vgg_model()
         #vgg.get_bottlenect_feature()   # 提取bottlenect特征，已经保存在本地，不需要重复运行
         vgg.build_top_model()
         vgg.fineTune_fully_connected_layer()
+
+    # 2.0 fineTune ConvBlock5 and FullyConnect
+    flag_2 = True
+    if flag_2:
+        vgg.build_vgg_model()
+        vgg.build_top_model()
+        vgg.fineTune_conv_bolck5_layer()
+
+    # 3.0
+
 
 
 """
