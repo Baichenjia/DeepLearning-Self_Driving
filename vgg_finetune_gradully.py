@@ -145,13 +145,13 @@ class vggClassify():
 
     #
     # 设置全连接层
-    def build_top_model():
+    def build_top_model(self):
         # 搭建模型最后的全连接层
         print "----------------"
         print "设置全连接层"
 
         top_model = Sequential()
-        top_model.add(Flatten(input_shape=train_data.shape[1:]))
+        top_model.add(Flatten(input_shape=np.array([7, 7, 512])))
         top_model.add(Dense(512, activation='relu'))
         top_model.add(Dropout(0.5))
         top_model.add(Dense(128, activation='relu'))
@@ -163,7 +163,7 @@ class vggClassify():
 
     #
     # 使用bottlenect特征，训练全连接层
-    def fineTune_fully_connected_layer():
+    def fineTune_fully_connected_layer(self):
         print "----------------"
         print "使用bottlenect特征，训练全连接层  保存至 ", self.path_fully_connected
 
@@ -365,7 +365,7 @@ if __name__ == '__main__':
 
     # 1.0 提取bottlenect 特征，建立全连接层，微调全连接层权重
     flag_1 = True
-    if flag1:
+    if flag_1:
         vgg.build_vgg_model()
         #vgg.get_bottlenect_feature()   # 提取bottlenect特征，已经保存在本地，不需要重复运行
         vgg.build_top_model()
