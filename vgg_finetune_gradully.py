@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+from keras.applications.vgg16 import VGG16
 from keras.applications.vgg16 import preprocess_input
 from keras.models import Model, Sequential, save_model
 from keras.optimizers import SGD
@@ -111,7 +111,7 @@ class vggClassify():
         # 载入预训练好的权重
         self.model.load_weights(self.weights_path)
         if K.backend() == 'theano':
-            convert_all_kernels_in_model(model)
+            convert_all_kernels_in_model(self.model)
 
         # 训练数据归一化处理
         print "图片归一化预处理..."
@@ -358,8 +358,8 @@ class vggClassify():
 #
 if __name__ == '__main__':
     vgg = vggClassify()
-    #vgg.build_vgg_model()
-
+    vgg.build_vgg_model()
+    vgg.get_bottlenect_feature()
 
 
 """
