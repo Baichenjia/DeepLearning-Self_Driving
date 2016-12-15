@@ -39,8 +39,8 @@ class vggClassify():
         assert os.path.exists(self.path_fully_connected), "Not Found path path_fully_connected dir"
 
         # 训练样本个数 验证样本个数
-        self.train_data_size = 900
-        self.valid_data_size = 120
+        self.train_data_size = 4500
+        self.valid_data_size = 900
 
         # 迭代次数
         self.nb_epoch = 100
@@ -134,13 +134,13 @@ class vggClassify():
         # 对验证数据提取特征
         valid_generator = valid_datagen.flow_from_directory(
                 'data/validation',
-                target_size=(224, 224),  # 高为180，宽为320
+                target_size=(224, 224),
                 batch_size=32,
                 class_mode=None,   # 此处只用来通过VGG网络提取特征，因此不需要生成类别
                 shuffle=False)     # 不对数据进行打乱
         bottleneck_features_validation = self.model.predict_generator(valid_generator, self.valid_data_size)
         print "\n验证数据特征维度", bottleneck_features_validation.shape  # (120, 5, 10, 512)
-        np.save(open(self.bottlenect_train_path, 'w'), bottleneck_features_validation)
+        np.save(open(self.bottlenect_val_path, 'w'), bottleneck_features_validation)
         print "验证数据特征保存在 bottleneck_features_validation.npy 中..."
 
     #
