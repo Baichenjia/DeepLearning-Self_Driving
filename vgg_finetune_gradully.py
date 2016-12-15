@@ -127,7 +127,7 @@ class vggClassify():
                 class_mode=None,   # 此处只用来通过VGG网络提取特征，因此不需要生成类别
                 shuffle=False)     # 不对数据进行打乱
         bottleneck_features_train = self.model.predict_generator(train_generator, self.train_data_size)
-        print "\n训练数据特征维度", bottleneck_features_train.shape   # (900, 5, 10, 512)
+        print "\n训练数据特征维度", bottleneck_features_train.shape   # (4500, 7, 7, 512)
         np.save(open(self.bottlenect_train_path, 'w'), bottleneck_features_train)
         print "训练数据特征保存在 bottleneck_features_train.npy 中..."
 
@@ -139,18 +139,36 @@ class vggClassify():
                 class_mode=None,   # 此处只用来通过VGG网络提取特征，因此不需要生成类别
                 shuffle=False)     # 不对数据进行打乱
         bottleneck_features_validation = self.model.predict_generator(valid_generator, self.valid_data_size)
-        print "\n验证数据特征维度", bottleneck_features_validation.shape  # (120, 5, 10, 512)
+        print "\n验证数据特征维度", bottleneck_features_validation.shape  # (900, 7, 7, 512)
         np.save(open(self.bottlenect_val_path, 'w'), bottleneck_features_validation)
         print "验证数据特征保存在 bottleneck_features_validation.npy 中..."
 
     #
-    # 自己搭建全连接层，随机初始化，微调权重，并保存
+    # 设置全连接层
+    def build_top_model():
+        # 搭建模型最后的全连接层
+        print "----------------"
+        print "设置全连接层"
+
+        top_model = Sequential()
+        top_model.add(Flatten(input_shape=train_data.shape[1:]))
+        top_model.add(Dense(512, activation='relu'))
+        top_model.add(Dropout(0.5))
+        top_model.add(Dense(128, activation='relu'))
+        top_model.add(Dropout(0.5))
+        top_model.add(Dense(32, activation='relu'))
+        top_model.add(Dropout(0.5))
+        top_model.add(Dense(3, activation='softmax'))
+        self.top_model = top_model
+
+    #
+    # 使用bottlenect特征，训练全连接层
     def fineTune_fully_connected_layer():
         print "----------------"
-        print "fine tune 全连接层 并保存权重到", self.path_fully_connected
+        print "使用bottlenect特征，训练全连接层  保存至 ", self.path_fully_connected
 
-        # 载入训练和验证数据数据，并生成label
-
+        # 载入bottlenect数据
+        print "载入 bottlenect 特征..."
         train_data = np.load(open(self.bottlenect_train_path))
         train_labels = np.array([0]*(self.train_data_size/3)+[1]*(self.train_data_size/3)+[2]*(self.train_data_size/3))
 
@@ -166,20 +184,6 @@ class vggClassify():
         print "\n\n验证数据 shape = ", validation_data.shape
         print "验证label shape = ", validation_labels.shape
 
-        # 搭建模型最后的全连接层
-        print "\n\n开始训练... \n"
-
-        newmodel = Sequential()
-        newmodel.add(Flatten(input_shape=train_data.shape[1:]))
-
-        newmodel.add(Dense(512, activation='relu'))
-        newmodel.add(Dropout(0.5))
-        newmodel.add(Dense(128, activation='relu'))
-        newmodel.add(Dropout(0.5))
-        newmodel.add(Dense(32, activation='relu'))
-        newmodel.add(Dropout(0.5))
-        newmodel.add(Dense(3, activation='softmax'))
-
         # 梯度下降，动量更新
         # sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
 
@@ -193,8 +197,8 @@ class vggClassify():
         newmodel.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
 
         self.hist = newmodel.fit(train_data, train_labels,
-                nb_epoch=100, batch_size=30,
-                callbacks=[model_check, early_stopping],
+                nb_epoch=self.nb_epoch, batch_size=45,
+                callbacks=[model_check, early_stopping],   # model_check, early_stopping
                 validation_data=(validation_data, validation_labels),
                 shuffle=True)
 
@@ -204,7 +208,7 @@ class vggClassify():
         log_file.close()
         self.plot_hist()
 
-        print "fineTune_fully_connected_layer 训练完毕，权重保存...完毕！"
+        print "全连接层训练完毕，权重保存...完毕！"
 
     #
     def vgg_fine_tune(self):
