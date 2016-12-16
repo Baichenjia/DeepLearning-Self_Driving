@@ -30,6 +30,9 @@ class vggClassify():
         self.weights_path = "../experiment2/vgg_models/vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5"
         assert os.path.exists(self.weights_path), 'Model weights not found'
 
+        """
+            fine-tune 全连接层
+        """
         # 瓶颈特征存储位置
         self.bottlenect_train_path = "bottlenect_feature/bottleneck_features_train.npy"
         self.bottlenect_val_path = "bottlenect_feature/bottleneck_features_validation.npy"
@@ -43,16 +46,36 @@ class vggClassify():
         self.path_weights_fully_connected = "weights_fully_connected/sgd/checkpoint-002-0.33.h5"
         assert os.path.exists(self.path_weights_fully_connected), "Not Found path path_weights_fully_connected"
 
-        # 同时 fine tune ConvBlock5 和 全连接层 权重
+        # BottleNect 特征的size， 该 size 由 VGG16 的网络结构决定
+        self.bottlenect_feature_size = np.array([7, 7, 512])
+
+        """
+            fine-tune convBlock5 和 全连接层
+        """
+
+        # 同时 fine tune ConvBlock5 和 全连接层 权重， 训练结果存储在path_conv_block5目录下
         self.path_conv_block5 = "weights_conv_block5/"
         assert os.path.exists(self.path_conv_block5), "Not Found path path_conv_block5 dir"
+
+        # 训练好的微调conv5后的卷积层的权重
+        self.path_weights_conv_block5 = "weights_conv_block5/checkpoint-006-0.35.h5"
+        assert os.path.exists(self.path_weights_conv_block5), "Not Found path_weights_conv_block5"
+
+        """
+            fine_tune convBlock4 和 convBlock5 和 全连接层
+        """
+
+        # 同时finetune ConvBlock4 and ConvBlock5 and fully-cnnected，结果存储在path_conv_block4目录下
+        self.path_conv_block4 = "weights_conv_block4/"
+        assert os.path.exists(self.path_conv_block4), "Not Found path_conv_block4"
+
+        """
+            训练过程中的其他参数
+        """
 
         # 训练样本个数 验证样本个数
         self.train_data_size = 4500
         self.valid_data_size = 900
-
-        # BottleNect 特征的size， 该 size 由 VGG16 的网络结构决定
-        self.bottlenect_feature_size = np.array([7, 7, 512])
 
         # 迭代次数
         self.nb_epoch = 100
@@ -302,6 +325,75 @@ class vggClassify():
 
         print "fineTune_conv_bolck5_layer 训练完毕，权重保存...完毕！"
 
+    #
+    # 微调第 4 个卷积层模块
+    def fineTune_conv_bolck4_layer(self):
+        """
+        1. 为了进行fine-tune，所有的层都应该以训练好的权重为初始值
+        2. fine-tune最后的卷积块，而不是整个网络，这是为了防止过拟合
+        3. fine-tune应该在很低的学习率下进行，通常使用SGD优化而不是其他自适应学习率的优化算法
+        """
+        print "----------------"
+        print "fine-tune Convolution Block4 卷积层模块..."
+
+        # 前一步微调后的总权重存储于: path_weights_conv_block5
+        print "self.model 载入上次微调后的权重..."
+        self.model.add(self.top_model)   # 总模型
+        self.model.load_weights(self.path_weights_conv_block5)
+
+        # 将除了 conv4 conv5 fully-connected 之外的参数冻结
+        print "冻结模型在 0-17 层 即 ConvBlock1 - ConvBlock3 的参数..."
+        for layer in self.model.layers[:18]:
+            layer.trainable = False
+        for layer in self.model.layers[18:]:
+            layer.trainable = True
+
+        # 图像批量生成器
+        train_datagen = ImageDataGenerator(rescale=1./255)
+        valid_datagen = ImageDataGenerator(rescale=1./255)
+
+        train_generator = train_datagen.flow_from_directory(
+                'data/train',
+                target_size=(224, 224),
+                batch_size=45,
+                class_mode='categorical')  # 自动生成类别
+
+        valid_generator = valid_datagen.flow_from_directory(
+                'data/validation',
+                target_size=(224, 224),
+                batch_size=45,
+                class_mode='categorical')  # 自动生成类别
+
+        # sgd 梯度下降，动量更新
+        sgd = SGD(lr=1e-5, decay=1e-7, momentum=0.9, nesterov=True)
+        # modelCheck 保存在验证集上最好的模型   仅保留权重
+        model_check = ModelCheckpoint(self.path_conv_block4+"checkpoint-{epoch:03d}-{val_loss:.2f}.h5", monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True, mode='auto')
+        # 当验证集合的损失不再下降时，等待 patient 后停止训练
+        early_stopping = EarlyStopping(monitor='val_loss', patience=20, verbose=1, mode='auto')
+
+        # 交叉熵损失函数
+        self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
+
+        #
+        # self.train_data_size = 4500    self.valid_data_size
+        print "\n开始训练..."
+        self.hist = self.model.fit_generator(
+                        train_generator,
+                        samples_per_epoch=self.train_data_size,
+                        nb_epoch=self.nb_epoch,
+                        callbacks=[model_check, early_stopping],
+                        validation_data=valid_generator,
+                        nb_val_samples=self.valid_data_size
+                        )
+
+        # 保存日志并绘图显示
+        log_file = open(self.path_conv_block5 + "hist.txt", "w")
+        log_file.write(str(self.hist.history))
+        log_file.close()
+        support_func.plot_hist(self.path_conv_block5)
+
+        print "fineTune_conv_bolck4_layer 训练完毕，权重保存...完毕！"
+
 
 #
 if __name__ == '__main__':
@@ -316,14 +408,18 @@ if __name__ == '__main__':
         vgg.fineTune_fully_connected_layer()
 
     # 2.0 fineTune ConvBlock5 and FullyConnect
-    flag_2 = True
+    flag_2 = False
     if flag_2:
         vgg.build_vgg_model()
         vgg.build_top_model()
         vgg.fineTune_conv_bolck5_layer()
 
-    # 3.0
-
+    # 3.0 fineTune ConvBlock4 , ConvBlock5 and FullyConnect
+    flag_3 = True
+    if flag_3:
+        vgg.build_vgg_model()
+        vgg.build_top_model()
+        vgg.fineTune_conv_bolck4_layer()
 
 
 """
