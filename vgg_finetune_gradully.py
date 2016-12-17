@@ -43,7 +43,7 @@ class vggClassify():
         assert os.path.exists(self.path_fully_connected), "Not Found path path_fully_connected dir"
 
         # 训练好的全连接层的权重存储位置
-        self.path_weights_fully_connected = "weights_fully_connected/sgd/checkpoint-002-0.33.h5"
+        self.path_weights_fully_connected = "weights_fully_connected/checkpoint-020-0.07.h5"
         assert os.path.exists(self.path_weights_fully_connected), "Not Found path path_weights_fully_connected"
 
         # BottleNect 特征的size， 该 size 由 VGG16 的网络结构决定
@@ -58,7 +58,7 @@ class vggClassify():
         assert os.path.exists(self.path_conv_block5), "Not Found path path_conv_block5 dir"
 
         # 训练好的微调conv5后的卷积层的权重
-        self.path_weights_conv_block5 = "weights_conv_block5/checkpoint-006-0.35.h5"
+        self.path_weights_conv_block5 = "weights_conv_block5/checkpoint-000-0.07.h5"
         assert os.path.exists(self.path_weights_conv_block5), "Not Found path_weights_conv_block5"
 
         """
@@ -375,7 +375,7 @@ class vggClassify():
         self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
         #
-        # self.train_data_size = 4500    self.valid_data_size
+        # self.train_data_size = 4500    self.valid_data_size = 900
         print "\n开始训练..."
         self.hist = self.model.fit_generator(
                         train_generator,
@@ -387,7 +387,7 @@ class vggClassify():
                         )
 
         # 保存日志并绘图显示
-        log_file = open(self.path_conv_block5 + "hist.txt", "w")
+        log_file = open(self.path_conv_block4 + "hist.txt", "w")
         log_file.write(str(self.hist.history))
         log_file.close()
         support_func.plot_hist(self.path_conv_block5)
