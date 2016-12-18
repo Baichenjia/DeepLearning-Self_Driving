@@ -3,7 +3,7 @@
 import numpy as np
 import os
 from client_trans_file import trans_client
-
+from PIL import Image
 
 # 检测到新图片即可送到服务器端，检测到
 class transPic_RecvMsg():
@@ -15,6 +15,7 @@ class transPic_RecvMsg():
 
     #
     def detact_new_img(self):
+        print "监测小车拍摄的新图像..."
         while (True):
             filelist = sorted(os.listdir(self.auto_dir), key=lambda s: int(s[6:-4]))
             if len(filelist) == 0:
@@ -27,11 +28,17 @@ class transPic_RecvMsg():
             print total_path
             assert os.path.exists(total_path), "not found max_auto_file path! "
 
+            # 防止异常情况，保证文件可以被读取后再进行发送
+            while (True):
+                try:
+                    img = Image.open(total_path)
+                    if img.size[0] > 0 and img.size[1] > 0:
+                        print "将要传输图片的尺寸为: ", img.size
+                        break
+                except:
+                    pass
             # trans pic
-            self.client.send_pic(total_path)
-
-            # receive msg
-            y = self.client.receive_msg()
+            y = self.client.send_pic(total_path)
 
             print y
             print "各个类别的输出概率: "

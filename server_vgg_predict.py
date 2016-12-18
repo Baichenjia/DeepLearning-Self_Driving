@@ -109,20 +109,8 @@ class vggPredict():
     #
     # 前向传播计算
     def predict_single_img(self, imgpath):
-        import PIL
+
         img = Image.open(imgpath)
-        if img:
-            pilImg = PIL.Image.open(StringIO(str(img.data)))
-        elif imgData:
-            pilImg = PIL.Image.open(StringIO(imgData))
-
-        try:
-            pilImg.load()
-        except IOError:
-            pass # You can always log it to logger
-
-        pilImg.thumbnail((width, height), PIL.Image.ANTIALIAS)
-
         img = img.convert('RGB')
         img = img.resize((224, 224))
 
@@ -165,8 +153,8 @@ class vggPredict():
 if __name__ == '__main__':
     vggpredict = vggPredict()
     vggpredict.build_model()
-    #res = vggpredict.predict_single_img()
-    vggpredict.predict_batch_img()
+    res = vggpredict.predict_single_img("receive_pic_0.jpg")
+    #vggpredict.predict_batch_img()
 
 
 
