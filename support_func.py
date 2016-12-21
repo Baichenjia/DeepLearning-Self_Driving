@@ -1,18 +1,13 @@
-
 # -*- coding: utf-8 -*-
-import matplotlib as mpl
-mpl.use('Agg')
+
+import re
+import os
+import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_hist(pic_dir="weights_conv_block5/"):
-    import matplotlib as mpl
-    mpl.use('Agg')
-    import matplotlib.pyplot as plt
-
-    """
-        绘制图表明保存
-    """
+def plot_hist(pic_dir="weights_conv_block4/"):
+    #绘制图表明保存
     file_log = open(pic_dir + "hist.txt", "r").read().strip()
     dic = eval(file_log)
 
@@ -46,9 +41,33 @@ def plot_hist(pic_dir="weights_conv_block5/"):
 
     plt.savefig(pic_dir + 'train_val_loss_acc.jpg', dpi=500)
     print "日志 和 准确率图像 保存完毕！"
-    #plt.show()
+    plt.show()
 
 
+def clear_pyc_img():
+    """
+        删除当前目录下存在的 pyc 文件和 img 文件
+    """
+    file_list = os.listdir("./")
+    pattern_img = re.compile(r"^receive_\w+.jpg$")
+    pattern_pyc = re.compile(r"^\w+.pyc$")
+
+    for filename in file_list:
+        m_img = re.match(pattern_img, filename)
+        m_pyc = re.match(pattern_pyc, filename)
+
+        if m_img is None and m_pyc is None:
+            print "None: ", filename
+        elif m_img is not None:
+            print "image: ", m_img.string
+        else:
+            print "pyc: ", m_pyc.string
+
+#
 if __name__ == '__main__':
     plot_hist()
+    #clear_pyc_img()
+
+
+
 

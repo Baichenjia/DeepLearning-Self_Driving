@@ -2,6 +2,7 @@
 
 import numpy as np
 import os
+import time
 from client_trans_file import trans_client
 from PIL import Image
 
@@ -12,11 +13,13 @@ class transPic_RecvMsg():
         self.max_auto_file = ""
         self.client = trans_client()
         self.auto_dir = r"C:\Users\Vehicle\Documents\build-vehicle_gui-Desktop_Qt_5_5_1_MSVC2012_32bit-Debug\auto_drive"
+        #self.auto_dir = r"simulation/auto_drive"
 
     #
     def detact_new_img(self):
         print "监测小车拍摄的新图像..."
         while (True):
+            # frame_0000.jpg
             filelist = sorted(os.listdir(self.auto_dir), key=lambda s: int(s[6:-4]))
             if len(filelist) == 0:
                 continue
@@ -29,16 +32,24 @@ class transPic_RecvMsg():
             assert os.path.exists(total_path), "not found max_auto_file path! "
 
             # 防止异常情况，保证文件可以被读取后再进行发送
-            while (True):
-                try:
-                    img = Image.open(total_path)
-                    if img.size[0] > 0 and img.size[1] > 0:
-                        print "将要传输图片的尺寸为: ", img.size
-                        break
-                except:
-                    pass
+            previous_file_size = 0
+            while previous_file_size == 0 or os.stat(total_path).st_size != previous_file_size:
+                print "!!! In client_trinsPic_RecvMsg: ", os.stat(total_path).st_size
+                previous_file_size = os.stat(total_path).st_size
+                time.sleep(0.01)
+
             # trans pic
             y = self.client.send_pic(total_path)
+
+            # 错误处理，表示服务器端发生了错误
+            if y == -1:
+                print "*** 检测到服务器端发生了错误 IOerror in server"
+                auto_file = open(
+                    r"C:\Users\Vehicle\Documents\build-vehicle_gui-Desktop_Qt_5_5_1_MSVC2012_32bit-Debug\auto.txt", "w")
+                # auto_file = open("simulation/auto.txt", "w")
+                auto_file.write("-1 -1")
+                auto_file.close()
+                continue
 
             print y
             print "各个类别的输出概率: "
@@ -59,11 +70,14 @@ class transPic_RecvMsg():
                 print i + 1, ": prob=", prob, " label=", label, " label_mark=", label_mark
 
             # 新建文件
+
             auto_file = open(
                 r"C:\Users\Vehicle\Documents\build-vehicle_gui-Desktop_Qt_5_5_1_MSVC2012_32bit-Debug\auto.txt", "w")
+
+            #auto_file = open("simulation/auto.txt", "w")
             auto_file.write(str(res[0]) + " " + str(y[res[0]]))
             auto_file.close()
-            print "\n\n"
+            print "------------\n\n"
 
     #
     def clear_all_img(self):
@@ -71,7 +85,9 @@ class transPic_RecvMsg():
         清除上次保存的 .jpg 文件和上一个命令文件 auto.txt
         """
         del_autotxt = r"C:\Users\Vehicle\Documents\build-vehicle_gui-Desktop_Qt_5_5_1_MSVC2012_32bit-Debug"
-        del_imgfile = del_autotxt + "\\auto_drive"
+        #del_autotxt = "simulation"
+
+        del_imgfile = os.path.join(del_autotxt, "auto_drive")
         del_dir_autotxt = os.listdir(del_autotxt)
         del_dir_imgfile = os.listdir(del_imgfile)
 

@@ -111,6 +111,7 @@ class vggPredict():
     def predict_single_img(self, imgpath):
 
         img = Image.open(imgpath)
+        print "接收到的图片的尺寸为: ", img.size
         img = img.convert('RGB')
         img = img.resize((224, 224))
 
